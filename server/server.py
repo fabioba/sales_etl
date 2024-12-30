@@ -42,7 +42,7 @@ def generate_sales():
             'customer_name': customer['name'],
             'region': customer['region'],
             'payment_method': random.choice(payment_methods),
-            'transaction_date': time.strftime('%Y-%m-%d %H:%M:%S')
+            'sale_date': time.strftime('%Y-%m-%d %H:%M:%S')
         })
 
     return jsonify(sales_data)
