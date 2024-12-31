@@ -81,3 +81,4 @@ Since the data is retrieved by a server (pull ingestion) these are the steps to 
 
 ![Diagram](documentation/img/data_flow.png)
 
+
