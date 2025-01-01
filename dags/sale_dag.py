@@ -6,7 +6,7 @@ from airflow.decorators import dag, task, task_group
 from airflow.providers.google.cloud.hooks.gcs import GCSHook
 from airflow.providers.google.cloud.hooks.bigquery import BigQueryHook
 from airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobOperator
-
+from airflow.providers.google.cloud.transfers.gcs_to_gcs import GCSToGCSOperator
 
 import pendulum
 import pandas as pd
@@ -68,34 +68,43 @@ def sale_dag():
 
         @task()
         def load_data_dwh():
-            """"""
-        gcs_hook = GCSHook(gcp_conn_id= 'gcp-sales-data')
+            gcs_hook = GCSHook(gcp_conn_id= 'gcp-sales-data')
 
-        list_raw_files = gcs_hook.list(bucket_name='sales-data-raw', prefix='raw/')
+            list_raw_files = gcs_hook.list(bucket_name='sales-data-raw', prefix='raw/')
 
-        for raw_file in list_raw_files:
+            for raw_file in list_raw_files:
 
-            logger.info(f'read raw_file: {raw_file}')
+                logger.info(f'read raw_file: {raw_file}')
 
-            # Download the file as a string
-            file_content = gcs_hook.download(bucket_name='sales-data-raw', object_name=raw_file)
-            
-            # Convert the content to a pandas DataFrame
-            df = pd.read_csv(io.StringIO(file_content.decode('utf-8')))
+                # Download the file as a string
+                file_content = gcs_hook.download(bucket_name='sales-data-raw', object_name=raw_file)
+                
+                # Convert the content to a pandas DataFrame
+                df = pd.read_csv(io.StringIO(file_content.decode('utf-8')))
 
 
-            # Initialize the BigQuery Hook
-            bq_hook = BigQueryHook(gcp_conn_id= 'gcp-sales-data')
-            
-            # Load the DataFrame to BigQuery
-            bq_hook.insert_rows_from_dataframe(
-                project_id="ace-mile-446412-j2",
-                dataset_id="SALES",
-                table_id="RAW_SALES",
-                dataframe=df,
-            )
+                # Initialize the BigQuery Hook
+                bq_hook = BigQueryHook(gcp_conn_id= 'gcp-sales-data')
+                
+                # Load the DataFrame to BigQuery
+                bq_hook.insert_rows_from_dataframe(
+                    project_id="ace-mile-446412-j2",
+                    dataset_id="SALES",
+                    table_id="RAW_SALES",
+                    dataframe=df,
+                )
 
-        ingest_data_from_api() >> load_data_dwh()
+        gcs_raw_to_hist = GCSToGCSOperator(
+                task_id="gcs_raw_to_hist",
+                source_bucket="data",
+                source_objects= "raw/*",
+                destination_bucket="sales-data-raw",
+                destination_object="hist/",
+                gcp_conn_id= 'gcp-sales-data',
+                move_object = True
+            )    
+
+        ingest_data_from_api() >> load_data_dwh() >> gcs_raw_to_hist
 
 
     @task_group(group_id='transform_bgq')
@@ -103,17 +112,23 @@ def sale_dag():
         
         @task_group(group_id='dim')
         def dim():
+
             dim_product = BigQueryInsertJobOperator(
                 task_id="dim_product",
                 configuration={
                     "query": {
-                        "query": """
-                            INSERT INTO `your-project-id.your-dataset.your-table`
-                            (column1, column2, column3)
-                            VALUES
-                            ('value1', 'value2', 123),
-                            ('value4', 'value5', 456);
-                        """,
+                        "query":"sql/dim_product.sql",
+                        "useLegacySql": False,
+                    }
+                },
+                gcp_conn_id="gcp-sales-data",  # Replace if using a custom connection
+            )
+
+            dim_customer = BigQueryInsertJobOperator(
+                task_id="dim_customer",
+                configuration={
+                    "query": {
+                        "query":"sql/dim_product.sql",
                         "useLegacySql": False,
                     }
                 },
@@ -121,10 +136,21 @@ def sale_dag():
             )
 
 
-            dim_product 
+            dim_product >> dim_customer
         
 
-        dim()
+        fct_sales = BigQueryInsertJobOperator(
+            task_id="fct_sales",
+            configuration={
+                "query": {
+                    "query":"sql/fct_sales.sql",
+                    "useLegacySql": False,
+                }
+            },
+            gcp_conn_id="gcp-sales-data",  # Replace if using a custom connection
+        )
+
+        dim() >> fct_sales
         
 
     extract_load_bgq() >> transform_bgq()

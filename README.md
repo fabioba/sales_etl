@@ -107,5 +107,30 @@ create table ace-mile-446412-j2.SALES.RAW_SALES(
   total_amount string
 );
 
+CREATE TABLE ace-mile-446412-j2.SALES.DIM_PRODUCT (
+    product_id STRING,
+    product_name STRING,
+    category STRING
+);
+
+CREATE TABLE ace-mile-446412-j2.SALES.DIM_CUSTOMER (
+    customer_id STRING,
+    customer_name STRING,
+    region STRING
+);
+
+CREATE TABLE ace-mile-446412-j2.SALES.FCT_SALES (
+    sales_id STRING,
+    sale_date DATE,
+    customer_id STRING,
+    product_id STRING,
+    payment_method STRING,
+    quantity INT64,
+    price FLOAT64,
+    total_amount FLOAT64
+);
+
+
+
 ```
 
