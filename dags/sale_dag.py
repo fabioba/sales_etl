@@ -2,15 +2,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from airflow.decorators import dag, task
+from airflow.decorators import dag, task, task_group
 from airflow.providers.google.cloud.hooks.gcs import GCSHook
+from airflow.providers.google.cloud.hooks.bigquery import BigQueryHook
+from airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobOperator
 
 
 import pendulum
 import pandas as pd
 import io
-import requests
-import json
+from resources.sales_data import generate_sales
 
 from datetime import datetime
 
@@ -36,22 +37,13 @@ def sale_dag():
     4. move raw data to hist
     '''
 
-    @task()
-    def ingest_data_from_api():
-        """"""
-
-        # read 10 sales
-        url = 'http://172.17.0.2:5000/sales?count=10'
-
-        # read data from api
-        response = requests.get(url)
-
-        status = response.status_code
-
-        logger.info(f'status: {status}')
-
-        if status == 200:
-            list_sales = json.loads(response.content)
+    @task_group(group_id='extract_load_bgq')
+    def extract_load_bgq():
+            
+        @task()
+        def ingest_data_from_api():
+            """"""
+            list_sales = generate_sales()
 
             df_sales = pd.DataFrame(list_sales)
 
@@ -65,20 +57,76 @@ def sale_dag():
             csv_buffer.seek(0)
 
             # Upload CSV to GCS
-            gcs_hook = GCSHook(gcp_conn_id= 'gcp-sales-data	')
+            gcs_hook = GCSHook(gcp_conn_id= 'gcp-sales-data')
             gcs_hook.upload(
                 bucket_name= 'sales-data-raw',
-                object_name= f'sales_data_{datetime.now().strftime("%m_%d_%Y_%H:%M:%S")}.csv',
+                object_name= f'raw/sales_data_{datetime.now().strftime("%m_%d_%Y_%H:%M:%S")}.csv',
                 data=csv_buffer.getvalue(),
                 mime_type='text/csv',
             )
 
 
+        @task()
+        def load_data_dwh():
+            """"""
+        gcs_hook = GCSHook(gcp_conn_id= 'gcp-sales-data')
+
+        list_raw_files = gcs_hook.list(bucket_name='sales-data-raw', prefix='raw/')
+
+        for raw_file in list_raw_files:
+
+            logger.info(f'read raw_file: {raw_file}')
+
+            # Download the file as a string
+            file_content = gcs_hook.download(bucket_name='sales-data-raw', object_name=raw_file)
+            
+            # Convert the content to a pandas DataFrame
+            df = pd.read_csv(io.StringIO(file_content.decode('utf-8')))
 
 
+            # Initialize the BigQuery Hook
+            bq_hook = BigQueryHook(gcp_conn_id= 'gcp-sales-data')
+            
+            # Load the DataFrame to BigQuery
+            bq_hook.insert_rows_from_dataframe(
+                project_id="ace-mile-446412-j2",
+                dataset_id="SALES",
+                table_id="RAW_SALES",
+                dataframe=df,
+            )
+
+        ingest_data_from_api() >> load_data_dwh()
 
 
-    ingest_data_from_api()
+    @task_group(group_id='transform_bgq')
+    def transform_bgq():
+        
+        @task_group(group_id='dim')
+        def dim():
+            dim_product = BigQueryInsertJobOperator(
+                task_id="dim_product",
+                configuration={
+                    "query": {
+                        "query": """
+                            INSERT INTO `your-project-id.your-dataset.your-table`
+                            (column1, column2, column3)
+                            VALUES
+                            ('value1', 'value2', 123),
+                            ('value4', 'value5', 456);
+                        """,
+                        "useLegacySql": False,
+                    }
+                },
+                gcp_conn_id="gcp-sales-data",  # Replace if using a custom connection
+            )
 
+
+            dim_product 
+        
+
+        dim()
+        
+
+    extract_load_bgq() >> transform_bgq()
 
 sale_dag()

@@ -72,6 +72,9 @@ Below there's a data sample:
 ## Logical Model
 ![Diagram](documentation/img/logical_model.png)
 
+## Physical Model
+![Diagram](documentation/img/physical_model.png)
+
 ## Architecture - Data Flow
 Since the data is retrieved by a server (pull ingestion) these are the steps to achieve:
 1. read data from the API
@@ -81,4 +84,28 @@ Since the data is retrieved by a server (pull ingestion) these are the steps to 
 
 ![Diagram](documentation/img/data_flow.png)
 
+
+## Architecture - Extract Load
+![Diagram](documentation/img/extract-load.png)
+
+
+### Bigquery
+
+```sql
+create table ace-mile-446412-j2.SALES.RAW_SALES(
+  category string,
+  customer_id string,	
+  customer_name string,
+  payment_method string,	
+  price string,	
+  product_id	string,
+  product_name	string,
+  quantity	string,
+  region	string,
+  sale_date	string,
+  sales_id	string,
+  total_amount string
+);
+
+```
 
