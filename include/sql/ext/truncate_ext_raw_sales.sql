@@ -1,0 +1,1 @@
+truncate table ace-mile-446412-j2.SALES.EXT_RAW_SALES;

@@ -12,6 +12,7 @@ import pendulum
 import pandas as pd
 import io
 from resources.sales_data import generate_sales
+from resources.utils import get_query
 
 from datetime import datetime
 
@@ -76,28 +77,29 @@ def sale_dag():
 
                 logger.info(f'read raw_file: {raw_file}')
 
+                # Initialize the BigQuery Hook
+                bq_hook = BigQueryHook(gcp_conn_id= 'gcp-sales-data')
+
                 # Download the file as a string
                 file_content = gcs_hook.download(bucket_name='sales-data-raw', object_name=raw_file)
                 
                 # Convert the content to a pandas DataFrame
                 df = pd.read_csv(io.StringIO(file_content.decode('utf-8')))
 
+                rows = df.to_dict(orient="records")
 
-                # Initialize the BigQuery Hook
-                bq_hook = BigQueryHook(gcp_conn_id= 'gcp-sales-data')
-                
-                # Load the DataFrame to BigQuery
-                bq_hook.insert_rows_from_dataframe(
-                    project_id="ace-mile-446412-j2",
-                    dataset_id="SALES",
-                    table_id="RAW_SALES",
-                    dataframe=df,
+                # Insert rows into the BigQuery table
+                bq_hook.insert_all(
+                    project_id= 'ace-mile-446412-j2',
+                    dataset_id= 'SALES',
+                    table_id= 'RAW_SALES',
+                    rows=rows,
                 )
 
         gcs_raw_to_hist = GCSToGCSOperator(
                 task_id="gcs_raw_to_hist",
-                source_bucket="data",
-                source_objects= "raw/*",
+                source_bucket="sales-data-raw",
+                source_objects= ["raw/*"],
                 destination_bucket="sales-data-raw",
                 destination_object="hist/",
                 gcp_conn_id= 'gcp-sales-data',
@@ -110,6 +112,33 @@ def sale_dag():
     @task_group(group_id='transform_bgq')
     def transform_bgq():
         
+        @task_group(group_id='ext')
+        def ext():
+
+            truncate_ext_raw_sales = BigQueryInsertJobOperator(
+                task_id="truncate_ext_raw_sales",
+                configuration={
+                    "query": {
+                        "query": get_query('include/sql/ext/truncate_ext_raw_sales.sql'),
+                        "useLegacySql": False,
+                    }
+                },
+                gcp_conn_id="gcp-sales-data",  # Replace if using a custom connection
+            )
+
+            insert_ext_raw_sales = BigQueryInsertJobOperator(
+                task_id="insert_ext_raw_sales",
+                configuration={
+                    "query": {
+                        "query": get_query('include/sql/ext/insert_ext_raw_sales.sql'),
+                        "useLegacySql": False,
+                    }
+                },
+                gcp_conn_id="gcp-sales-data",  # Replace if using a custom connection
+            )
+
+            truncate_ext_raw_sales >> insert_ext_raw_sales
+
         @task_group(group_id='dim')
         def dim():
 
@@ -117,7 +146,7 @@ def sale_dag():
                 task_id="dim_product",
                 configuration={
                     "query": {
-                        "query":"sql/dim_product.sql",
+                        "query": get_query('include/sql/dim/dim_product.sql'),
                         "useLegacySql": False,
                     }
                 },
@@ -128,7 +157,7 @@ def sale_dag():
                 task_id="dim_customer",
                 configuration={
                     "query": {
-                        "query":"sql/dim_product.sql",
+                        "query": get_query('include/sql/dim/dim_customer.sql'),
                         "useLegacySql": False,
                     }
                 },
@@ -143,14 +172,25 @@ def sale_dag():
             task_id="fct_sales",
             configuration={
                 "query": {
-                    "query":"sql/fct_sales.sql",
+                    "query": get_query('include/sql/fct/fct_sales.sql'),
                     "useLegacySql": False,
                 }
             },
             gcp_conn_id="gcp-sales-data",  # Replace if using a custom connection
         )
 
-        dim() >> fct_sales
+        update_cfg_flow_manager = BigQueryInsertJobOperator(
+            task_id="update_cfg_flow_manager",
+            configuration={
+                "query": {
+                    "query": get_query('include/sql/update_cfg_flow_manager.sql'),
+                    "useLegacySql": False,
+                }
+            },
+            gcp_conn_id="gcp-sales-data",  # Replace if using a custom connection
+        )
+
+        ext() >> dim() >> fct_sales >> update_cfg_flow_manager
         
 
     extract_load_bgq() >> transform_bgq()

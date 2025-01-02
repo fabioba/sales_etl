@@ -89,7 +89,7 @@ Since the data is retrieved by a server (pull ingestion) these are the steps to 
 ![Diagram](documentation/img/extract-load.png)
 
 
-### Bigquery
+### Bigquery - DDL
 
 ```sql
 create table ace-mile-446412-j2.SALES.RAW_SALES(
@@ -104,33 +104,60 @@ create table ace-mile-446412-j2.SALES.RAW_SALES(
   region	string,
   sale_date	string,
   sales_id	string,
-  total_amount string
+  total_amount string,
+  insert_timestamp timestamp default current_timestamp()
 );
 
+create table ace-mile-446412-j2.SALES.EXT_RAW_SALES(
+  category string,
+  customer_id int64,	
+  customer_name string,
+  payment_method string,	
+  price float64,	
+  product_id	int64,
+  product_name	string,
+  quantity	int64,
+  region	string,
+  sale_date	timestamp,
+  sales_id	int64,
+  total_amount float64,
+  insert_timestamp timestamp default current_timestamp()
+);
+
+drop table ace-mile-446412-j2.SALES.DIM_PRODUCT;
 CREATE TABLE ace-mile-446412-j2.SALES.DIM_PRODUCT (
-    product_id STRING,
+    product_id int64,
     product_name STRING,
-    category STRING
+    category STRING,
+    price float64,
+  insert_timestamp timestamp default current_timestamp()
 );
 
 CREATE TABLE ace-mile-446412-j2.SALES.DIM_CUSTOMER (
-    customer_id STRING,
+    customer_id int64,
     customer_name STRING,
-    region STRING
+    region STRING,
+  insert_timestamp timestamp default current_timestamp()
 );
 
+drop table ace-mile-446412-j2.SALES.FCT_SALES;
 CREATE TABLE ace-mile-446412-j2.SALES.FCT_SALES (
-    sales_id STRING,
-    sale_date DATE,
-    customer_id STRING,
-    product_id STRING,
+    fct_id int64,
+    sales_id int64,
+    sale_date timestamp,
+    customer_id int64,
+    product_id int64,
     payment_method STRING,
     quantity INT64,
-    price FLOAT64,
-    total_amount FLOAT64
+    total_amount FLOAT64,
+  insert_timestamp timestamp default current_timestamp()
 );
 
 
-
+CREATE TABLE ace-mile-446412-j2.SALES.CFG_FLOW_MANAGER (
+    FLOW_NAME STRING,
+    LAST_VALUE timestamp,
+  insert_timestamp timestamp default current_timestamp()
+);
 ```
 
