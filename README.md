@@ -116,7 +116,6 @@ create table ace-mile-446412-j2.SALES.EXT_RAW_SALES(
   insert_timestamp timestamp default current_timestamp()
 );
 
-drop table ace-mile-446412-j2.SALES.DIM_PRODUCT;
 CREATE TABLE ace-mile-446412-j2.SALES.DIM_PRODUCT (
     product_id int64,
     product_name STRING,
@@ -132,7 +131,6 @@ CREATE TABLE ace-mile-446412-j2.SALES.DIM_CUSTOMER (
   insert_timestamp timestamp default current_timestamp()
 );
 
-drop table ace-mile-446412-j2.SALES.FCT_SALES;
 CREATE TABLE ace-mile-446412-j2.SALES.FCT_SALES (
     fct_id int64,
     sales_id int64,
