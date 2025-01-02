@@ -48,20 +48,6 @@ Below there's a data sample:
         "region": "East",
         "payment_method": "Credit Card",
         "sale_date": "2024-12-30 15:20:30"
-    },
-    {
-        "sales_id": 5678,
-        "product_id": 2,
-        "product_name": "Smartphone",
-        "category": "Electronics",
-        "price": 800.0,
-        "quantity": 1,
-        "total_amount": 800.0,
-        "customer_id": 1,
-        "customer_name": "Alice",
-        "region": "North",
-        "payment_method": "PayPal",
-        "sale_date": "2024-12-30 15:21:10"
     }
 ]
 ```
@@ -77,10 +63,16 @@ Below there's a data sample:
 
 ## Architecture - Data Flow
 Since the data is retrieved by a server (pull ingestion) these are the steps to achieve:
+- EXTRACT and LOAD
 1. read data from the API
 2. store raw data into a bucket
 3. read raw data from bucket and load to datawarehouse
 4. move raw data to hist
+
+- TRANSFORM
+1. populate the DIM tables
+2. populate the FCT table
+
 
 ![Diagram](documentation/img/data_flow.png)
 
